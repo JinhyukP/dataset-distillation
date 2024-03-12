@@ -8,6 +8,11 @@ from torchvision import datasets, transforms
 from . import caltech_ucsd_birds
 from . import pascal_voc
 from .usps import USPS
+from . import pulsedb
+
+import numpy as np
+import torch
+from torch.utils.data import TensorDataset
 
 default_dataset_roots = dict(
     MNIST='./data/mnist',
@@ -17,7 +22,12 @@ default_dataset_roots = dict(
     Cifar10='./data/cifar10',
     CUB200='./data/birds',
     PASCAL_VOC='./data/pascal_voc',
+    PULSEDB='/PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulse_v1',
 )
+
+# /PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulse_v1/Signals_Train_spectrogram_ECG.npy
+# /PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulse_v1/Signals_Train_spectrogram_PPG.npy
+
 
 
 dataset_normalization = dict(
@@ -30,6 +40,8 @@ dataset_normalization = dict(
     CUB200=((0.47850531339645386, 0.4992702007293701, 0.4022205173969269),
             (0.23210887610912323, 0.2277066558599472, 0.26652416586875916)),
     PASCAL_VOC=((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+    PULSEDB=((-55.18958194, -55.18958194, -72.7312628), 
+             (20.79336364, 20.79336364, 18.75779879)),
 )
 
 
@@ -42,6 +54,7 @@ dataset_labels = dict(
              'deer', 'dog', 'monkey', 'horse', 'ship', 'truck'),
     CUB200=caltech_ucsd_birds.class_labels,
     PASCAL_VOC=pascal_voc.object_categories,
+    PULSEDB=list([120])
 )
 
 # (nc, real_size, num_classes)
@@ -55,6 +68,7 @@ dataset_stats = dict(
     Cifar10=DatasetStats(3, 32, 10),
     CUB200=DatasetStats(3, 224, 200),
     PASCAL_VOC=DatasetStats(3, 224, 20),
+    PULSEDB=DatasetStats(3, 63, 1),
 )
 
 assert(set(default_dataset_roots.keys()) == set(dataset_normalization.keys()) ==
@@ -185,5 +199,79 @@ def get_dataset(state, phase):
             phase = 'trainval'
         return pascal_voc.PASCALVoc2007(root, phase, transforms.Compose(transform_list))
 
+
+
+    elif name == 'PULSEDB':
+        return pulsedb.PULSEDBfull(phase)
+# """        def load_train_spectrogram(channel):
+#             Signals = np.load(f"/PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulse_v1/Signals_Train_spectrogram_{channel}.npy")
+#             return Signals
+#         def load_train_small_spectrogram(channel):
+#             # Signals = np.load(f"/PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulse_v1/Signals_Train_spectrogram_{channel}_small.npy")
+#             Signals = np.load(f"/PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulse_v1/Signals_Train_spectrogram_{channel}_sixman.npy")
+#             return Signals
+#         def load_test_spectrogram(channel):
+#             Signals = np.load(f"/PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulse_v1/Signals_CalFree_Test_spectrogram_{channel}.npy")
+
+#         def normalize_signal(Signals, mean, std):
+#             n_channel = Signals.shape[1]
+#             # assert n_channel == mean.shape[0] == std.shape[0]
+#             # ToDo: for loop is not required...
+#             for i in range(n_channel): 
+#                 Signals[:,i,:] = (Signals[:,i,:] - mean) / std   
+#             return Signals
+        
+#         mean_ECG = -55.18958194
+#         std_ECG = 20.79336364    
+#         mean_PPG = -72.7312628
+#         std_PPG = 18.75779879
+        
+#         if phase == 'train' or 'test':
+#             Signals_ECG = load_train_small_spectrogram(channel='ECG')
+#             Signals_PPG = load_train_small_spectrogram(channel='PPG')
+#             # SBPLabels = np.load(f"/PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulseDB/SBPLabels.npy")
+#             # SBPLabels = np.load(f"/PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulse_v1/SBPLabels_small.npy")
+#             SBPLabels = np.load(f"/PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulse_v1/SBPLabels_sixman.npy")
+#             SBPLabels = SBPLabels.reshape(-1, 1)
+
+#             Signals_ECG = normalize_signal(Signals_ECG, mean_ECG, std_ECG)            
+#             Signals_PPG = normalize_signal(Signals_PPG, mean_PPG, std_PPG)
+            
+#             Signals = np.concatenate((Signals_ECG, Signals_ECG, Signals_PPG), axis=1)
+            
+#             # Signals = Signals[:1000,]
+#             # SBPLabels = SBPLabels[:1000,]
+            
+#             print(f"Loading PULSEDB-train dataset")
+#             print(f"Signals_ECG.shape: {Signals_ECG.shape}")
+#             print(f"Signals_PPG.shape: {Signals_PPG.shape}")
+#             print(f"Signals.shape: {Signals.shape}")
+#             print(f"SBPLabels.shape: {SBPLabels.shape}")            
+#             print(f"dtype of dataset: {Signals.dtype}, {SBPLabels.dtype}")
+            
+#             pulsedb_dataset = TensorDataset(torch.from_numpy(Signals), torch.from_numpy(SBPLabels))
+        
+#         # if phase == 'test':
+#         #     Signals_ECG_test = load_test_spectrogram(channel='ECG')
+#         #     print(f"Signals_ECG.shape: {Signals_ECG_test.shape}")
+            
+#         #     Signals_PPG = load_test_spectrogram(channel='PPG')
+#         #     SBPLabels = np.load(f"/PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulseDB/SBPLabels_CalBased_Test.npy")
+
+#         #     print(f"Signals_ECG.shape: {Signals_ECG_test.shape}")
+#         #     print(f"Signals_PPG.shape: {Signals_PPG.shape}")
+#         #     print(f"SBPLabels.shape: {SBPLabels.shape}")   
+            
+#         #     Signals_ECG_test = normalize_signal(Signals_ECG_test, mean_ECG, std_ECG)            
+#         #     Signals_PPG = normalize_signal(Signals_PPG, mean_PPG, std_PPG)
+            
+#         #     print(f"Loading PULSEDB-CalBased-test dataset")
+#         #     print(f"Signals_ECG.shape: {Signals_ECG_test.shape}")
+#         #     print(f"Signals_PPG.shape: {Signals_PPG.shape}")
+#         #     print(f"SBPLabels.shape: {SBPLabels.shape}")            
+#         #     pulsedb_dataset = TensorDataset(torch.from_numpy(Signals_ECG_test), torch.from_numpy(Signals_PPG), torch.from_numpy(SBPLabels))
+                                    
+#         return pulsedb_dataset"""
+    
     else:
         raise ValueError('Unsupported dataset: %s' % state.dataset)

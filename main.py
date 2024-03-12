@@ -81,7 +81,7 @@ def main(state):
             logging.info('{}:\tTest Acc: {: >5.2f}%\tTest Loss: {: >7.4f}'.format(desc, acc.mean() * 100, loss.mean()))
             cur_idx = next_cur_idx
 
-    elif state.mode in ['distill_basic', 'distill_attack', 'distill_adapt']:
+    elif state.mode in ['distill_basic', 'distill_attack', 'distill_adapt', 'distill_reg']:
         # train models
         def load_train_models():
             if state.train_nets_type == 'unknown_init':

@@ -26,7 +26,7 @@ def _vis_results_fn(np_steps, distilled_images_per_class_per_step, dataset_info,
     dataset, nc, input_size, mean, std, label_names = dataset_info
 
     N = len(np_steps[0][0])
-    nrows = max(2, distilled_images_per_class_per_step)
+    nrows = max(2, distilled_images_per_class_per_step) # distilled_images_per_class_per_step = 1
     grid = (nrows, np.ceil(N / float(nrows)).astype(int))
     plt.rcParams["figure.figsize"] = (grid[1] * 1.5 + 1, nrows * 1.5 + 1)
 
@@ -84,7 +84,7 @@ def vis_results(state, steps, *args, immediate=False, **kwargs):
     if isinstance(steps[0][0], torch.Tensor):
         steps = to_np(steps)
 
-    _, _, nc, input_size, _, (mean, std), label_names = datasets.get_info(state)
+    _, _, nc, input_size, _, (mean, std), label_names = datasets.get_info(state)  # outputs: name, root, nc, input_size, num_classes, normalization, labels
     dataset_vis_info = (state.dataset, nc, input_size, np.array(mean), np.array(std), label_names)
 
     vis_args = (steps, state.distilled_images_per_class_per_step, dataset_vis_info, state.arch, state.image_dpi) + args
@@ -131,7 +131,11 @@ def save_results(state, steps, visualize=True, subfolder=''):
 
     steps = [(d.detach().cpu(), l.detach().cpu(), lr) for (d, l, lr) in steps]
     if visualize:
-        vis_results(state, steps, expr_dir)
+        if state.mode == 'distill_reg':
+            # print(f"current state.mode is {state.mode}")
+            pass
+        else:
+            vis_results(state, steps, expr_dir)
 
     torch.save(steps, save_data_path)
     logging.info('Results saved to {}'.format(save_data_path))

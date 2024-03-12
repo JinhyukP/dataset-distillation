@@ -2,7 +2,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from . import utils
-
+# from torchvision.models import resnet18
 
 class LeNet(utils.ReparamModule):
     supported_dims = {28, 32}
@@ -27,6 +27,29 @@ class LeNet(utils.ReparamModule):
         out = F.relu(self.fc2(out), inplace=True)
         out = self.fc3(out)
         return out
+
+class LeNetReg(utils.ReparamModule):
+    supported_dims = {28, 32, 63, 37}
+    
+    def __init__(self, state):
+        super(LeNetReg, self).__init__()
+        self.conv1 = nn.Conv2d(state.nc, 16, kernel_size=3, padding=1)
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv2 = nn.Conv2d(16, 32, kernel_size=3, padding=1)
+        self.fc1 = nn.Linear(4320, 128)
+        self.fc2 = nn.Linear(128, 64)
+        self.fc3 = nn.Linear(64, 1)
+
+    def forward(self, x):
+        # print(x.shape)
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        x = x.view(x.size(0), -1)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
+
 
 
 class AlexCifarNet(utils.ReparamModule):

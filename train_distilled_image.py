@@ -33,9 +33,23 @@ class Trainer(object):
 
         # labels
         self.labels = []
-        distill_label = torch.arange(state.num_classes, dtype=torch.long, device=state.device) \
-                             .repeat(state.distilled_images_per_class_per_step, 1)  # [[0, 1, 2, ...], [0, 1, 2, ...]]
-        distill_label = distill_label.t().reshape(-1)  # [0, 0, ..., 1, 1, ...]
+        # init = 'rand'
+        init = 'load'
+        if self.state.mode == 'distill_reg':
+            if init == 'rand':
+                distill_label = torch.tensor([110, 115, 117, 118, 119, 120, 121, 123, 125, 130], dtype=torch.float)
+            elif init == 'load':
+                loaded_label = np.load("/PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulse_v1/for_distill/SBPLabels_80.npy")
+                loaded_label = loaded_label.astype(np.float32)
+                loaded_label = loaded_label.reshape(-1)
+                distill_label = torch.from_numpy(loaded_label)
+            # initialize with sampled data
+            
+        else:
+            distill_label = torch.arange(state.num_classes, dtype=torch.long, device=state.device) \
+                                .repeat(state.distilled_images_per_class_per_step, 1)  # [[0, 1, 2, ...], [0, 1, 2, ...]]
+            distill_label = distill_label.t().reshape(-1)  # [0, 0, ..., 1, 1, ...]
+            
         for _ in range(self.num_data_steps):
             self.labels.append(distill_label)
         self.all_labels = torch.cat(self.labels)
@@ -43,8 +57,36 @@ class Trainer(object):
         # data
         self.data = []
         for _ in range(self.num_data_steps):
-            distill_data = torch.randn(self.num_per_step, state.nc, state.input_size, state.input_size,
-                                       device=state.device, requires_grad=True)
+            if self.state.mode == 'distill_reg':
+                if init == 'rand':
+                    distill_data = torch.randn(self.num_per_step, state.nc, 63, 37,
+                                            device=state.device, requires_grad=True)  
+                elif init == 'load':
+                    def normalize_signal(Signals, mean, std):
+                        n_channel = Signals.shape[1]
+                        # assert n_channel == mean.shape[0] == std.shape[0]
+                        # ToDo: for loop is not required...
+                        for i in range(n_channel): 
+                            Signals[:,i,:] = (Signals[:,i,:] - mean) / std   
+                        return Signals
+
+                    mean_ECG = -55.18958194
+                    std_ECG = 20.79336364    
+                    mean_PPG = -72.7312628
+                    std_PPG = 18.75779879
+                                        
+                    loaded_ECG = np.load("/PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulse_v1/for_distill/Signals_Train_spectrogram_ECG_80.npy")
+                    loaded_PPG = np.load("/PublicSSD/jhpark/ECGBP/1_preprocessed_data/pulse_v1/for_distill/Signals_Train_spectrogram_PPG_80.npy")                    
+                    loaded_ECG = normalize_signal(loaded_ECG, mean_ECG, std_ECG)
+                    loaded_PPG = normalize_signal(loaded_PPG, mean_PPG, std_PPG)
+                    loaded_data = np.concatenate((loaded_ECG, loaded_ECG, loaded_PPG), axis=1)
+                    loaded_data = loaded_data.astype(np.float32)
+                    distill_data = torch.from_numpy(loaded_data)
+                    distill_data.to(device=state.device)
+                    distill_data.requires_grad = True
+            else:            
+                distill_data = torch.randn(self.num_per_step, state.nc, state.input_size, state.input_size,
+                                        device=state.device, requires_grad=True)
             self.data.append(distill_data)
             self.params.append(distill_data)
 
@@ -102,7 +144,7 @@ class Trainer(object):
 
         # final L
         model.eval()
-        output = model.forward_with_param(rdata, params[-1])
+        output = model.forward_with_param(rdata, params[-1].double())
         ll = final_objective_loss(state, output, rlabel)
         return ll, (ll, params, gws)
 

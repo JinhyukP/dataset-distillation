@@ -35,6 +35,10 @@ def load_train_models(state):
 
 
 def task_loss(state, output, label, **kwargs):
+    if state.mode == 'distill_reg':
+        label = label.view(-1, 1)
+        return F.mse_loss(output, label, **kwargs)   
+             
     if state.num_classes == 2:
         label = label.to(output, non_blocking=True).view_as(output)
         return F.binary_cross_entropy_with_logits(output, label, **kwargs)
@@ -43,7 +47,7 @@ def task_loss(state, output, label, **kwargs):
 
 
 def final_objective_loss(state, output, label):
-    if state.mode in {'distill_basic', 'distill_adapt'}:
+    if state.mode in {'distill_basic', 'distill_adapt', 'distill_reg'}:
         return task_loss(state, output, label)
     elif state.mode == 'distill_attack':
         label = label.clone()
@@ -66,17 +70,21 @@ def train_steps_inplace(state, models, steps, params=None, callback=None):
 
         data = data.detach()
         label = label.detach()
+        # print(label)
+        # print(label.dtype)
         lr = lr.detach()
 
         for model, w in zip(models, params):
             model.train()  # callback may change model.training so we set here
+            # print(f"data dtype: {data.dtype}  param dtype: {w.dtype}")
             output = model.forward_with_param(data, w)
             loss = task_loss(state, output, label)
+            # print(f"loss: {loss.item()}")
             loss.backward(lr.squeeze())
             with torch.no_grad():
                 w.sub_(w.grad)
                 w.grad = None
-
+                
     if callback is not None:
         callback(len(steps), params)
 
@@ -104,8 +112,11 @@ def evaluate_models(state, models, param_list=None, test_all=False, test_loader_
     device = state.device
     num_classes = state.num_classes
     corrects = np.zeros(n_models, dtype=np.int64)
+    MSEs = np.zeros(n_models, dtype=np.float)
+    MADs = np.zeros(n_models, dtype=np.float)
     losses = np.zeros(n_models)
     attack_mode = state.mode == 'distill_attack'
+    is_regression = state.mode == 'distill_reg'
     total = np.array(0, dtype=np.int64)
     if attack_mode:
         class_total = np.zeros(num_classes + 1, dtype=np.int64)
@@ -127,22 +138,33 @@ def evaluate_models(state, models, param_list=None, test_all=False, test_loader_
                 if param_list is None or param_list[k] is None:
                     output = model(data)
                 else:
-                    output = model.forward_with_param(data, param_list[k])
+                    # print(data.shape)
+                    # print(param_list[k].shape)
+                    output = model.forward_with_param(data, param_list[k].double())
 
-                if num_classes == 2:
+                if is_regression:
+                    pred = output
+                elif num_classes == 2:
                     pred = (output > 0.5).to(target.dtype).view(-1)
                 else:
                     pred = output.argmax(1)  # get the index of the max log-probability
 
-                correct_list = pred == target
-                losses[k] += task_loss(state, output, target, reduction='sum').item()  # sum up batch loss
-                if attack_mode:
-                    for c in range(num_classes):
-                        class_mask = target == c
-                        class_corrects[k, c] += correct_list[class_mask].sum().item()
-                        if c == state.attack_class:
-                            class_corrects[k, -1] += (pred[class_mask] == state.target_class).sum().item()
-                corrects[k] += correct_list.sum().item()
+                if is_regression:
+                    diff_list = pred - target
+                    losses[k] += task_loss(state, output, target, reduction='sum').item()  # sum up batch loss
+                    MSEs[k] += np.power(diff_list, 2).mean().item()
+                    MADs[k] += np.abs(diff_list).mean().item()
+                    # MSE = np.sqrt(diff.sum()).item()
+                else:
+                    correct_list = pred == target
+                    losses[k] += task_loss(state, output, target, reduction='sum').item()  # sum up batch loss
+                    if attack_mode:
+                        for c in range(num_classes):
+                            class_mask = target == c
+                            class_corrects[k, c] += correct_list[class_mask].sum().item()
+                            if c == state.attack_class:
+                                class_corrects[k, -1] += (pred[class_mask] == state.target_class).sum().item()
+                    corrects[k] += correct_list.sum().item()
 
             total += output.size(0)
             if not test_all and i + 1 >= state.test_niter:
@@ -151,7 +173,11 @@ def evaluate_models(state, models, param_list=None, test_all=False, test_loader_
         if attack_mode:
             class_total[-1] = class_total[state.attack_class]
     accs = corrects / total
-    if attack_mode:
+    MSEs = MSEs / total
+    MADs = MADs / total
+    if is_regression:
+        return MADs, losses
+    elif attack_mode:
         class_accs = class_corrects / class_total[None, :]
         for n in range(num_classes):
             per_class_accs = class_accs[:, n]

@@ -1,0 +1,9 @@
+# init = rand
+python main.py --mode distill_reg --dataset PULSEDB --arch LeNetReg --distill_lr 1e-5
+
+python main.py --mode distill_reg --dataset PULSEDB --arch LeNetReg --distill_lr 1e-5 --lr 1e-4 --epoch 500
+
+
+# init = load
+python main.py --mode distill_reg --dataset PULSEDB --arch LeNetReg --distill_lr 2e-5 --lr 1e-4 --epoch 444
+

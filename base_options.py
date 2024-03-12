@@ -244,7 +244,7 @@ class BaseOptions(object):
         parser.add_argument('--arch', type=str, default='LeNet',
                             help='architecture: LeNet | AlexNet | etc.')
         parser.add_argument('--mode', type=str, default='distill_basic',
-                            help='mode: train | distill_basic | distill_attack | distill_adapt ')
+                            help='mode: train | distill_basic | distill_attack | distill_adapt | distill_reg')
         parser.add_argument('--distill_lr', type=float, default=0.02,
                             help='learning rate to perform GD with distilled images PER STEP (default: 0.02)')
         parser.add_argument('--model_dir', type=str, default='./models/',
@@ -460,8 +460,9 @@ class BaseOptions(object):
         if state.device_id < 0:
             state.opt.device = torch.device("cpu")
         else:
-            torch.cuda.set_device(state.device_id)
-            state.opt.device = torch.device("cuda:{}".format(state.device_id))
+            # torch.cuda.set_device(state.device_id)
+            # state.opt.device = torch.device("cuda:{}".format(state.device_id))
+            state.opt.device = torch.device("cpu")
 
         if not dummy:
             if state.device.type == 'cuda' and torch.backends.cudnn.enabled:
